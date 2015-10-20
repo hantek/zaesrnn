@@ -16,12 +16,12 @@ class SRNN(Model):
     def __init__(self, name, numvis, numhid, numlayers, numframes, output_type='real', dropout=0.0, numpy_rng=None, theano_rng=None):
         super(SRNN, self).__init__(name=name)
 
-        self.numvis = numvis
-        self.numhid = numhid
-        self.numlayers = numlayers
-        self.numframes = numframes
-        self.output_type = output_type
-        self.dropout = dropout
+        self.numvis = numvis            # frame length * alphabet size (1 * 27)
+        self.numhid = numhid            # 512
+        self.numlayers = numlayers      # 3
+        self.numframes = numframes      # maxnumframes (100)
+        self.output_type = output_type  # softmax
+        self.dropout = dropout          # 0.5
 
         if not numpy_rng:
             self.numpy_rng = np.random.RandomState(1)
@@ -89,14 +89,18 @@ class SRNN(Model):
                                                         sequences=self._input_frames,
                                                         outputs_info=[self._input_frames[0], self.hids_0])
         else:
-            self._dropoutmask = theano_rng.binomial(size=(self.inputs.shape[1] // self.numvis, self._batchsize, self.numhid), n=1, p=self.dropout, dtype=theano.config.floatX) 
+            self._dropoutmask = theano_rng.binomial(
+                size=(self.inputs.shape[1] // self.numvis,
+                      self._batchsize, self.numhid),
+                n=1, p=self.dropout, dtype=theano.config.floatX
+            )
             (self._predictions, self.hids), self.updates = theano.scan(
                                                         fn=step_dropout,
                                                         sequences=[self._input_frames, self._dropoutmask],
                                                         outputs_info=[self._input_frames[0], self.hids_0])
 
         if self.output_type == 'real':
-            self._prediction = self._predictions[:, :, :self.numvis]
+            self._prediction = self._predictions[:, :, :self.numvis]  # dims: [time step, batch idx, numvis]
         elif self.output_type == 'binary':
             self._prediction = sigmoid(self._predictions[:, :, :self.numvis])
         elif self.output_type == 'softmax':
@@ -105,9 +109,13 @@ class SRNN(Model):
             self._prediction = T.nnet.softmax(
                 self._predictions[:, :, :self.numvis].reshape((
                     self._predictions.shape[0] * self._predictions.shape[1],
-                    self.numvis))).reshape((
-                        self._predictions.shape[0], self._predictions.shape[1],
-                        self.numvis))
+                    self.numvis
+                ))
+            ).reshape((
+                self._predictions.shape[0],
+                self._predictions.shape[1],
+                self.numvis
+            ))
         else:
             raise ValueError('unsupported output_type')
 
@@ -115,7 +123,7 @@ class SRNN(Model):
 
         if self.output_type == 'real':
             self._cost = T.mean(( self._prediction_for_training - self._input_frames[1:self.numframes])**2)
-            self._cost_varlen = T.mean(( self._prediction - self._input_frames[1:])**2)
+            self._cost_varlen = T.mean(( self._prediction - self._input_frames[1:])**2)  # for various lengths
         elif self.output_type == 'binary':
             self._cost = -T.mean( self._input_frames[1:self.numframes] * T.log(self._prediction_for_training) + (1.0 - self._input_frames[1:self.numframes]) * T.log( 1.0 - self._prediction))
             self._cost_varlen = -T.mean( self._input_frames[1:] * T.log(self._prediction_for_training) + (1.0 - self._input_frames[1:]) * T.log( 1.0 - self._prediction))
@@ -128,8 +136,17 @@ class SRNN(Model):
         self.inputs_var = T.fmatrix('inputs_var')
         self.nsteps = T.lscalar('nsteps')
         givens = {}
-        givens[self.inputs] = T.concatenate(( self.inputs_var[:, :self.numvis], T.zeros(( self.inputs_var.shape[0], self.nsteps*self.numvis))), axis=1) 
-        self.predict = theano.function( [self.inputs_var, theano.Param( self.nsteps, default=self.numframes-4)], self._prediction.transpose(1, 0, 2).reshape(( self.inputs_var.shape[0], self.nsteps*self.numvis)), updates=self.updates, givens=givens)
+        givens[self.inputs] = T.concatenate(
+            ( self.inputs_var[:, :self.numvis],
+              T.zeros((self.inputs_var.shape[0], self.nsteps*self.numvis))
+            ),
+            axis=1)
+        
+        # predict given the first letters. 
+        self.predict = theano.function(
+            [self.inputs_var, theano.Param(self.nsteps, default=self.numframes-4)],
+            self._prediction.transpose(1, 0, 2).reshape((self.inputs_var.shape[0], self.nsteps*self.numvis)),
+            updates=self.updates, givens=givens)
         self.cost = theano.function( [self.inputs], self._cost, updates=self.updates)
         self.grads = theano.function( [self.inputs], self._grads, updates=self.updates)
 
