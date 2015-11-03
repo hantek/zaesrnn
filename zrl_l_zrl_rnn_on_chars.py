@@ -95,7 +95,7 @@ valid_perplexity = theano.function([], ppw, givens={model.inputs:valid_features}
 # TRAIN MODEL
 trainer = graddescent_rewrite.SGD_Trainer(model,
                                           train_features_numpy,
-                                          batchsize=32,
+                                          batchsize=50,
                                           learningrate=0.1,
                                           loadsize=50000,
                                           gradient_clip_threshold=1.0)
@@ -107,6 +107,7 @@ f.write(str(crnt_ppw)+'\n')
 print 'training...'
 for epoch in xrange(100):
     epccost = trainer.step()
+    save_params(model, 'zrl_l_zrl_rnn_on_chars_params.npy')
     # print "perplexity train: %f, valid: %f" % (train_perplexity(), valid_perplexity())
     crnt_ppw = valid_perplexity()
     print "valid perplexity: %f" % (crnt_ppw)

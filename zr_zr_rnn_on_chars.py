@@ -2,7 +2,7 @@ import os
 import sys 
 #sys.path.append("..")
 sys.path.append("../downup/")
-import zrl_zrl_rnn
+import zr_zr_rnn
 import graddescent_rewrite
 
 import pylab
@@ -59,24 +59,21 @@ train_features_numpy = onehot(numpy.array([dictionary[c] for c in text[:numtrain
 valid_features_numpy = onehot(numpy.array([dictionary[c] for c in text[numtrain:numtrain+numvalid]])).reshape(-1, 27*maxnumframes*framelen)
 numcases = train_features_numpy.shape[0]
 del text 
-print 'Done.'
+print '... done'
 
 numpy_rng.shuffle(train_features_numpy)
 numpy_rng.shuffle(valid_features_numpy)
 #train_features = theano.shared(train_features_numpy, name='train_set', borrow=True)
 valid_features = theano.shared(valid_features_numpy, name='valid_set', borrow=True)
 
-model = zrl_zrl_rnn.SRNN(name="aoeu",
-                         numvis=framelen*alphabetsize,
-                         numsz=1024,
-                         numrz=None,
-                         numsl=None,
-                         numrl=1024,
-                         numframes=50,
-                         cheating_level=0., 
-                         output_type="softmax",
-                         numpy_rng=numpy_rng, 
-                         theano_rng=theano_rng)
+model = zr_zr_rnn.SRNN(name="aoeu",
+                       numvis=framelen*alphabetsize,
+                       numhid=512, 
+                       numframes=50,
+                       cheating_level=0.0, 
+                       output_type="softmax",
+                       numpy_rng=numpy_rng, 
+                       theano_rng=theano_rng)
 
 ppw = 2 ** T.mean(  # first mean NLL over each time step prediction, then mean over the whole batch
     -T.log2(  # apply log_2
@@ -100,19 +97,14 @@ trainer = graddescent_rewrite.SGD_Trainer(model,
                                           loadsize=50000,
                                           gradient_clip_threshold=1.0)
 
-f=open('zrl_zrl_rnn_on_chars_perplexity.log', 'w')
-crnt_ppw = valid_perplexity()
-print "BEFORE_TRAINING: valid perplexity: %f" % (crnt_ppw)
-f.write(str(crnt_ppw)+'\n')
+print "BEFORE_TRAINING: valid perplexity: %f" % (valid_perplexity())
 print 'training...'
 for epoch in xrange(100):
-    epccost = trainer.step()
-    save_params(model, 'zrl_zrl_rnn_on_chars_params.npy')
+    trainer.step()
+    save_params(model, 'zr_zr_rnn_on_chars_params.npy')
     # print "perplexity train: %f, valid: %f" % (train_perplexity(), valid_perplexity())
-    crnt_ppw = valid_perplexity()
-    print "valid perplexity: %f" % (crnt_ppw)
-    f.write(str(crnt_ppw)+'\n')
+    print "valid perplexity: %f" % (valid_perplexity())
 
-f.close()
+
 print "sampling from the model:" + ''.join(vec2chars(model.sample(numframes=1000), invdict))
 pdb.set_trace()
