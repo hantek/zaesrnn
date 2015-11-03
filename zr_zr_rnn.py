@@ -10,6 +10,10 @@ from model import Model
 
 sigmoid = T.nnet.sigmoid
 
+def ReLU(t,      # theano variable
+         th=0.0  # python scalar
+        ):
+    return t * (t > th)
 
 class SRNN(Model):
     def __init__(self, name,  # a string for identifying model.
@@ -81,11 +85,10 @@ class SRNN(Model):
         # one-step prediction, used by sampling function
         self.hids_t0 = [T.zeros((self._batchsize, self.numhid)),
                         T.zeros((self._batchsize, self.numhid))]
-        self.hids_t1 = [T.dot(self.hids_t0[0], self.whh[0]) + T.dot(self._input_frames[0], self.wxh[0])]
-        self.hids_t1.append(
-                        T.dot(self.hids_t0[1], self.whh[1]) + T.dot(self.hids_t1[-1], self.wxh[1]))
-        for k in range(2):
-            self.hids_t1[k] = self.hids_t1[k] * (self.hids_t1[k] > self.selectionthreshold)
+        self.hids_t1 =     [ReLU(T.dot(self.hids_t0[0], self.whh[0]) + \
+                                 T.dot(self._input_frames[0], self.wxh[0]))]
+        self.hids_t1.append(ReLU(T.dot(self.hids_t0[1], self.whh[1]) + \
+                                 T.dot(self.hids_t1[-1], self.wxh[1])))
 
         self.x_pred_1 = self.bx
         for k in range(2):
@@ -94,11 +97,10 @@ class SRNN(Model):
 
         def step(x_tm1, hids_tm1):
             hids_tm1 = [hids_tm1[:,k*self.numhid:(k+1)*self.numhid] for k in range(2)]
-            pre_hids_t = [T.dot(hids_tm1[0], self.whh[0]) + T.dot(x_tm1, self.wxh[0])]
-            pre_hids_t.append(T.dot(hids_tm1[1], self.whh[1]) + T.dot(pre_hids_t[-1], self.wxh[1]))
-            hids_t = [pre_hids_t[0] * (pre_hids_t[0] > 0)]
-            for k in range(1, 2):
-                hids_t.append(pre_hids_t[k] * (pre_hids_t[k] > self.selectionthreshold))
+            hids_t =     [ReLU(T.dot(hids_tm1[0], self.whh[0]) + \
+                               T.dot(x_tm1, self.wxh[0]))]
+            hids_t.append(ReLU(T.dot(hids_tm1[1], self.whh[1]) + \
+                               T.dot(hids_t[-1], self.wxh[1])))
 
             x_pred_t = self.bx
             for k in range(2):
